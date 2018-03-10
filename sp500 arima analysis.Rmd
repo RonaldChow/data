@@ -1,0 +1,120 @@
+---
+title: "Time Series Modeling of the S&P 500 Index"
+output: word_document
+---
+
+# Objectives
+
+This analysis aims to perform time series modeling of the S&P 500 index for 40 days (20 July 2017 - 14 Sep 2017) using ARIMA with a given data set (1 Jan 2010 to 9 Mar 2018).
+
+The price data is obtained using the quantmod R package.
+```{r}
+library("quantmod")
+# Obtain data online
+# ^GSPC = S&P 500 Index
+getSymbols("^GSPC", from="2010-1-1")
+head(GSPC)
+#Take a brief look at the data
+```
+There are different types of available data. The adjusted close price is used in the price modeling in this analysis. It would be easier to visualize the adjusted close price with a plot.
+```{r}
+plot(GSPC$GSPC.Adjusted)
+```
+The plot of the adjusted price shows a generally increasing trend from 2010 to the early Mar 2018. Moreover, non-constant variance and non-constant mean are observed in this plot. I am curious to check if the adjusted price time series is stationary. Stationarity of a time series is very important to using ARIMA as the modeling technique.
+
+To check for the stationarity of a time series, the Augmented Dickey-Fuller statistical test is performed.
+```{r}
+library("tseries")
+adf.test(GSPC$GSPC.Adjusted)
+```
+Since the p-value is large (compared to 0.05 at 95% confidence interval), the null hypothesis cannot be rejected. Thus, the time series is not stationary.
+
+I am also curious to check if there is severe autocorrelation in this time series by using the autocorrelation function plot.
+```{r}
+acf(GSPC$GSPC.Adjusted)
+```
+Since all peaks exceed the 95% confidence interval bands, autocorrelation is severe in this time series.
+
+I'd like to recap the problems observed so far for the adjusted price time series.
+1. Non-constant mean
+2. Non-constant variance
+3. Non-stationary
+4. Severe autocorrelation
+
+The first problem can be solved by applying a first order differencing. By differencing the adjusted close price time series, the time series of return is obtained. The return time series is then plotted.
+```{r}
+return <- diff(GSPC$GSPC.Adjusted)
+return <- return[-1]
+names(return) <- c("Return")
+plot(return)
+```
+By inspecting this time series, it has approximately a constant mean and a constant variance. 
+
+The next step is to investigate the autocorrelation in this time series.
+
+```{r}
+acf(return)
+```
+The ACF plot shows that there is no autocorrelation in the return time series.
+
+Before proceeding, I am going to partition this time series into the training set (80%) and the testing set (20%).
+```{r}
+nrow(return)
+```
+The total number of rows of the price data is 2059.
+```{r}
+#Split the data into training set (80%) and data set (20%)
+ts.train <- return[1:1647,] # 80%
+ts.test <- return[1647:2059,] #20%
+```
+```{r}
+head(ts.train)
+head(ts.test)
+```
+
+Since the training set will be used for building up the ARIMA model, it is important for it to be stationary. The Augmented Dickey-Fuller test is performed again to check if the time series is stationary.
+```{r}
+adf.test(ts.train)
+```
+Since the p-value < 0.05 at 95% confidence interval, the null hypothesis is rejected and the alternative hypothesis is accepted. Thus, it is very likely to be a stationary time series.
+
+Next, the forecast R library is loaded in order to perform the ARIMA modeling. In terms of the selection of the AR and MA orders, auto.arima() is employed to building the ARIMA model using the training set and to find out the combination of those orders which gives the smallest AIC value.
+```{r}
+library("forecast")
+model <- auto.arima(ts.train)
+summary(model)
+```
+
+(p,d,q) = (2,0,2) as a result of the determination of the orders
+
+The next step is to evaluate the ARIMA fitting results and this is done by inspecting the residuals.
+```{r}
+checkresiduals(model)
+```
+The top plot does not show any pattern and it resembles white noise, which are great. The ACF plot shows that this time series is roughly not correlated except at lags 24 and 25. The distribution plot shows that the distribution of the residuals is not quite normally distributed. The Shapiro-Wilk normality test is then used to check if the residuals are distributed normally.
+```{r}
+shapiro.test(model$residuals)
+```
+Since the p-value is < 0.05 at 95% confidence interval, the null hypothesis is rejected and the alternative hypothesis is accepted. Thus, the residuals are not normally distributed.
+
+Let's run a forecast model based on the existing fitted ARIMA model for 40 days.
+```{r}
+return.forecast <- forecast(model, h=40)
+plot(return.forecast)
+```
+The ARIMA model predicts a generally increasing trend for the next 40 days. Let's compare this prediction with the actual results.
+```{r}
+plot(ts.test[1:40])
+```
+The actual time series is decreasing. 
+
+# Conclusion
+There is a significant discrepancy between the predicted return and the actual return of S&P 500 in the same time period.
+
+The possible sources of errors of this analysis are:
+
+1. The residuals of the ARIMA model are not normally distributed.
+2. There are many factors that can affect the increase/decrease of return, which are not accounted for in this analysis.
+
+
+
