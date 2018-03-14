@@ -5,7 +5,7 @@ output: word_document
 
 # Objectives
 
-This analysis aims to perform time series modeling of the S&P 500 index for 40 days (20 July 2017 - 14 Sep 2017) using ARIMA with a given data set (1 Jan 2010 to 9 Mar 2018).
+This analysis aims to perform time series modeling of the S&P 500 index in Jan 2018 using ARIMA with a given data set (1 Jan 2010 to 29 Dec 2017).
 
 The price data is obtained using the quantmod R package.
 ```{r}
@@ -55,17 +55,23 @@ The next step is to investigate the autocorrelation in this time series.
 ```{r}
 acf(return)
 ```
-The ACF plot shows that there is no autocorrelation in the return time series.
+The ACF plot shows that there is no autocorrelation in the return time series at 95% confidence interval.
 
-Before proceeding, I am going to partition this time series into the training set (80%) and the testing set (20%).
+Returns from 1 Jan 2010 to 29 Dec 2017 will be used as the training set while returns from the first working day to the last working day in Jan 2019 will be forecasted.
 ```{r}
 nrow(return)
 ```
 The total number of rows of the price data is 2059.
+
+The return entry on 29 Dec 2017 is at row 2012.
 ```{r}
-#Split the data into training set (80%) and data set (20%)
-ts.train <- return[1:1647,] # 80%
-ts.test <- return[1647:2059,] #20%
+return[2012,]
+```
+
+```{r}
+#Split the data into training set and testing set
+ts.train <- return[1:2012,] # 80%
+ts.test <- return[2013:2059,] #20%
 ```
 ```{r}
 head(ts.train)
@@ -91,30 +97,32 @@ The next step is to evaluate the ARIMA fitting results and this is done by inspe
 ```{r}
 checkresiduals(model)
 ```
-The top plot does not show any pattern and it resembles white noise, which are great. The ACF plot shows that this time series is roughly not correlated except at lags 24 and 25. The distribution plot shows that the distribution of the residuals is not quite normally distributed. The Shapiro-Wilk normality test is then used to check if the residuals are distributed normally.
+4 clusters of variance are observed. The ACF plot shows that this time series is roughly uncorrelated except at lags 17, 20, 24 and 25. The distribution plot shows that the distribution of the residuals is not quite normally distributed. The Shapiro-Wilk normality test is then used to check if the residuals are distributed normally.
 ```{r}
 shapiro.test(model$residuals)
 ```
 Since the p-value is < 0.05 at 95% confidence interval, the null hypothesis is rejected and the alternative hypothesis is accepted. Thus, the residuals are not normally distributed.
 
-Let's run a forecast model based on the existing fitted ARIMA model for 40 days.
+Let's run a forecast model based on the existing fitted ARIMA model for 22 days (there are only 22 working days in Jan 2018).
 ```{r}
-return.forecast <- forecast(model, h=40)
+return.forecast <- forecast(model, h=22)
 plot(return.forecast)
 ```
-The ARIMA model predicts a generally increasing trend for the next 40 days. Let's compare this prediction with the actual results.
+Clustered The ARIMA model predicts a generally increasing trend for the next 22 days. Let's compare this prediction with the actual results.
 ```{r}
-plot(ts.test[1:40])
+plot(ts.test[1:21])
 ```
-The actual time series is decreasing. 
+The actual time series is decreasing in Jan 2018. 
 
 # Conclusion
 There is a significant discrepancy between the predicted return and the actual return of S&P 500 in the same time period.
 
 The possible sources of errors of this analysis are:
 
-1. The residuals of the ARIMA model are not normally distributed.
+1. Information available on the market can affect the price change signifnicantly.
 2. There are many factors that can affect the increase/decrease of return, which are not accounted for in this analysis.
 
+# Further Actions
+In order to forecast S&P 500 in Jan 2018 accurately using given data, GARCH may be used in conjunction with ARIMA modeling.
 
 
