@@ -36,6 +36,7 @@ acf(GSPC$GSPC.Adjusted)
 Since all peaks exceed the 95% confidence interval bands, autocorrelation is severe in this time series.
 
 I'd like to recap the problems observed so far for the adjusted price time series.
+
 1. Non-constant mean
 2. Non-constant variance
 3. Non-stationary
@@ -70,8 +71,8 @@ return[2012,]
 
 ```{r}
 #Split the data into training set and testing set
-ts.train <- return[1:2012,] # 80%
-ts.test <- return[2013:2059,] #20%
+ts.train <- return[1:2012,] # training set
+ts.test <- return[2013:2059,] # testing set
 ```
 ```{r}
 head(ts.train)
