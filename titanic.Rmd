@@ -1,0 +1,302 @@
+---
+title: "Survival prediction for the Titanic data set"
+output: html_notebook
+---
+
+# Introduction
+
+The Titanc data set was obtained on Kaggle (https://www.kaggle.com/c/titanic). It comes with 2 files (train.csv and test.csv). The objective of this study is to predict the survival/death of the passengers in the test.csv file by using the passenger data in the train.csv file as training set. Logistic regression is used as the modeling approach in this study.
+
+Firstly, the two csv files are loaded in R.
+```{r}
+train <- read.csv("train.csv")
+test <- read.csv("test.csv")
+```
+The next step involves inspecting the structures of the two data sets.
+```{r}
+#Inspect the structure of train.csv
+str(train)
+```
+In the training data set, there are 891 passengers with 12 descriptors. The types of descriptors can be grouped as below.
+
+1. Integer: PassengerID, Survived (0 for death, 1 for survived), Pclass, SibSp (number of siblings), and Parch (number of parents and children)
+
+2. Factor: Name, Sex, Ticket, Cabin and Embarked
+
+3. Number: Age and Fare
+
+The descriptors, Survived, Pclass, and EmBarked, are essentially categorical variables.
+
+Regarding the structure of the testing data set.
+```{r}
+#Inspect the structure of test.csv
+str(test)
+```
+The output shows that the structure of the testing data set is essentially the same as that of the training data set with the exception of the missing Survived descriptor. The objective of this study is to predict the surival data of the 418 passengers in the testing data set.
+
+From now on, I will focus on the training data set first in order to do some exploratory data analyses and model building.
+
+## Exploratory Data Analysis
+
+The next step is to inspect the first few rows of data in the training data set.
+```{r}
+head(train)
+```
+After having a rough idea of what the training data set looks like, it would be great to get an overall summary of the data.
+```{r}
+summary(train)
+```
+There are several points to note in the output.
+
+1. The median of Survived is 0 --> 50% of the passengers in the training data set are dead.
+
+2. Most people were in class 3 in Titanic.
+
+3. Most passengers on Titanic were male.
+
+4. Passengers were across different age groups, ranging from babies to old people. Moreover, the age values of 177 people are missing.
+
+5. 50% of the passengers did not have siblings. However, some people had up to 8 siblings on board.
+
+6. Some passengers might have up to 6 children and parents with them. Big families!
+
+7. 687 values in the Ticket variable are missing. (687/891)* 100 % ~ 77%. Thus, basically 77% of the Ticket values are missing.
+
+8. 2 values in the Embarked variable are missing.
+
+Let's visualize some variables next. However, not all variables will be visualized because not all of them are useful for survival prediction.
+
+PassengerId, Name, and Ticket are just nominal variables so they are not related to the survival rate prediction and they are not going to be visualized.
+
+I am going to visualize the Survived variable with a histogram.
+```{r}
+hist(train$Survived)
+```
+From the plot, most passengers are dead in the training set.
+
+Let's take a look at the Pclass (ticket class) variable by using a histogram.
+```{r}
+hist(train$Pclass)
+```
+Most passengers picked the third class for their tickets.
+
+The Age variable is then visualized with a density plot in order to show the distribution of ages with the missing values omitted.
+```{r}
+hist(train$Age)
+```
+Most passengers fall in 20 to 40 years old. There are 177 values (~ 20%) missing in this variable and this will need to be dealt with separately.
+
+Let's take a look at the number of siblings.
+```{r}
+hist(train$SibSp)
+```
+It turns out that most people did not have any siblings with them. Passengers with more than 4 siblings on board were very rare.
+
+Another variable related to family is the one describing the number of children and parents.
+```{r}
+hist(train$Parch)
+```
+Most people did not have any parents nor children with them. Passengers with 2 or more children and parents on board were very rare.
+
+Regarding Fare, let's see.
+```{r}
+hist(train$Fare)
+```
+Most people picked cheap tickets.
+
+Since most values in Cabin are missing, this variable is not visualized. Regarding Embarked, since it is a qualitative variable, it will be visualized by using a barplot.
+```{r}
+barplot(table(train$Embarked))
+```
+'S' (S for Southampton) is the most frequent value in the Embarked variable. Since only 2 values are missing in Embarked, they are going to be neglected from now on.
+```{r}
+train <- train[!is.na(train$Embarked),]
+rownames(train) <- NULL
+#Check for missing values in the Embarked variable
+table(is.na(train$Embarked))
+```
+There are no missing values in Embarked now.
+
+
+Now I need to deal with the missing values in the Age variable. Several points to note:
+
+1. Simple missing value imputation with mean/median/mode is not a good way to solve this problem because this can change the variance of Age. Moreover, this oversimplified approach does not produce any realistic estimates.
+
+2. Linear regression is a more sophisticated approach in order to impute missing values. However, it assumes the values are normally distributed. I am going to perform a statistical test for normality (Shapiro-Wilk Normality Test) for Age.
+```{r}
+shapiro.test(train$Age)
+```
+For Shapiro-Wilk normality test,
+H_0: The population is normally distributed.
+H_a: The population is not normally distributed.
+
+Since the p-value is < 0.05 (at 95% confidence interval), the null hypothesis is rejected. Thus, the variables in Age are not normally distributed.
+
+Thus, imputing the missing values in Age is not a good way out. Imputing the missing values in Age using linear regression may yield unrealistic estimates.
+
+3. kNN (k Nearest Neighbour) is a good way out in this case because it does not assume any distribution of data. It imputes a missing value based on distance between a missing value and its k nearest neighbour. In order to perform kNN imputation, the VIM R library is loaded.
+```{r}
+#Load the VIM library
+library("VIM")
+# An empirical rule to choose the number k is to take the square root of the number of #training samples.
+# The number of existing data entries in Age = 891 - 177 = 714. Square root (714) = 26
+# 
+# kNN imputation
+train <- kNN(train, variable ="Age", k = 26)
+table(is.na(train$Age))
+```
+There are no missing values in Age now. A good imputation would make no change to the population distribution. Let's visualize the distribution of Age after missing values imputation.
+```{r}
+hist(train$Age)
+```
+The distribution after imputation is essentially the same as that before imputation. I will perform a statistical test to make sure that the population distribution remains as a non-normal distribution.
+```{r}
+shapiro.test(train$Age)
+```
+The p-value is <0.05, so the null hypothesis is rejected. The Age population is not normally distributed.
+
+Since not all variables are going to be included in model building, I build another data frame to store the required variables for modeling in 'train.red'.
+```{r}
+train.red <- subset(train, select = c(Survived,Pclass, Sex, Age, SibSp, Parch, Fare, Embarked))
+colnames(train.red)
+```
+These are the variables which are required in my model.
+
+## Model Building
+### Logistic Regression
+I will perform the survival prediction using logistic regression because it is very good at performing binary classification. In order to do so, I will need to train my model. Thus, I will split the data in train.csv into training set (80%) and testing set (20%) in order to validate the model.
+```{r}
+train.model <- train.red[1:712,]
+test.model <- train.red[713:891,]
+```
+Applying the logistic regression model to the train.model
+```{r}
+model <- glm(Survived ~ ., family=binomial(link='logit'), data=train.model)
+summary(model)
+```
+At 95% confidence interval, where alpha = 0.05, only 4 variables are statistically significant, namely, Pclass, sexmale, Age, and SibSp in which Sexmale is the most important because it has the smallest p-value. Thus, Sexmale is highly associated with Survived. The interpretation of the 4 statistically significant important variables are as follows. A unit increase in age decreases the log odds of suvival by 0.045. Being a male decreases the log odds of survival by 2.68. A unit increase in the ticket class decreases the log odds of survival by 1.2. An increase in the number of siblings on board decreases the log odds of survival by 3.3. 
+
+Test for significance of the overall regression In this section, the significance of the overall regression was tested by using the difference between null deviance and residual deviance to obtain the p-value.
+```{r}
+1-pchisq(317.78,9)
+```
+Since the p-value is 0, the overall regression is significance.
+
+### Model Fit Assessment 
+
+Goodness of Fit Hypothesis Testing Using deviance residual
+```{r}
+c(deviance(model), 1-pchisq(deviance(model),702))
+```
+Since the p-value > 0.5, the null hypothesis must be accepted. This indicates that the fitting is a good fit.
+
+Assessing the goodness of fit using Pearson residuals
+```{r}
+## Using Pearson residuals
+pearson_residuals <- residuals(model, type="pearson")
+pearson_residuals.tvalue <- sum(pearson_residuals^2)
+c(pearson_residuals.tvalue, 1-pchisq(pearson_residuals.tvalue,702))
+```
+Since the p-value > 0.5, the null hypothesis must be accepted. This indicates that the fitting is a good fit.
+
+### Cross Validation Using Data in test.model
+```{r}
+prediction <- predict(model, newdata = test.model, type='response')
+prediction <- ifelse(prediction > 0.5, 1,0) #0.5 as the threshold value 
+```
+Performance assessment using a confusion matrix as provided in the caret R package
+```{r}
+library("caret")
+library("e1071")
+confusionMatrix(data=prediction, reference=test.model$Survived)
+```
+The accuracy of the logistic regression model is about 84%, which is quite good.
+
+Another way to assess the prediction performance is to employ the ROC curve using the ROCR library.
+```{r}
+library(ROCR)
+predictions <- predict(model, newdata=test.model, type="response")
+pred <- prediction(predictions, test.model$Survived)
+perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(perf, colorize = TRUE, text.adj = c(-0.2,1.7), print.cutoffs.at = seq(0,1,0.1))
+```
+A ROC plot is obtained by plotting the true positive rate and the false positive rate. By computing the area under the ROC curve (AUC), an indicator of the reliability of the prediction can be obtained.
+
+```{r}
+auc <- performance(pred, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+An AUC value of 1 is ideal. In this case, the AUC value is 0.89, which is very close to 1. Thus, this model comes with good predictability.
+
+### Prediction with the new set data
+Selecting the required variables for survival prediction
+```{r}
+test.data <- subset(test, select = c(2,4,5,6,7,9,11))
+colnames(test.data)
+```
+```{r}
+summary(test.data)
+```
+There are 86 missing values in Age and 1 missing value in Fare. Again, kNN imputation will be used for imputing missing values in Age.
+
+Visualizing the distribution of Age in test.data before missing values imputation
+```{r}
+hist(test.data$Age)
+```
+
+
+```{r}
+test.data <- kNN(test.data, variable ="Age", k = 20)
+table(is.na(test.data$Age))
+```
+There are no more missing values in Age. Let's visualize the population distribution of Age after missing values imputation.
+```{r}
+hist(test.data$Age)
+```
+The distribution of Age is roughly the same before and after missing values imputation.
+
+Predicting survival data for passengers in test.data
+```{r}
+#Ignore the 1 missing variable in Fare
+test.data <- test.data[!is.na(test.data$Fare),]
+rownames(test.data) <- NULL
+
+#Predict
+testdatapre <-predict(model, newdata=test.data, type="response")
+testprefinal <- ifelse(testdatapre > 0.5, 1,0)
+testprefinal
+```
+```{r}
+table(testprefinal)
+```
+Using the logistic regression, 255 passengers are predicted to be dead while 162 passengers are predicted to be alive.
+
+Finally, I would like to output the prediction results to titanic_prediction_results.csv file.
+```{r}
+#Remove the row where Fare has a missing value
+test <- test[!is.na(test$Fare),]
+rownames(test) <- NULL
+
+export <- data.frame(PassengerID = test$PassengerId, Survived = testprefinal)
+write.csv(export, file = 'titanic_prediction_results.csv', row.names = F)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
